@@ -375,43 +375,47 @@ input{
   align-items:center;
   justify-content:center;
   padding:18px;
-  z-index: 12; /* above topbar + modals */
+  z-index: 12;
 }
 
 .revealCardLarge{
-  width:min(980px, 96vw);
-  background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
+  width: max-content;           /* tight wrap */
+  background: var(--card);      /* NOT transparent */
   border:1px solid var(--line);
   border-radius: 22px;
   box-shadow: var(--shadow);
   padding:16px;
 }
 
+.revealTop{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:14px;
+}
+
 .revealHeadline{
-  font-size:20px;
+  font-size:22px;
   font-weight:950;
   letter-spacing:.01em;
 }
 
+.revealTeamNameUnder{
+  margin-top:6px;
+  font-size:18px;              /* smaller than headline */
+  font-weight:900;
+  color: var(--muted);
+}
+
 .revealBodyLarge{
-  display:grid;
-  grid-template-columns: 460px 1fr;
-  gap:18px;
-  align-items:center;
   margin-top:14px;
 }
 
 .revealImg{
-  width:460px;
-  height:460px;
+  width:620px;                 /* ~35% bigger than 460 */
+  height:620px;
   border-radius:24px;
   object-fit:cover;
   border:1px solid var(--line);
   background: rgba(255,255,255,.06);
-}
-
-.revealTeamNameSm{
-  font-size:18px;
-  font-weight:900;
-  color: var(--muted);
 }
