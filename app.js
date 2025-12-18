@@ -22,7 +22,7 @@ const firebaseConfig = {
 };
 
 /** PASSCODE (speed bump) */
-const PASSCODE = "CHANGE_ME";
+const PASSCODE = "Keem";
 
 /** Firestore schema */
 const COLLECTION_NAME = "teams";
