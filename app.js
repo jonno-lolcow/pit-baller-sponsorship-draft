@@ -426,26 +426,26 @@ el("btnRandom")?.addEventListener("click", async () => {
   try {
     requireUnlocked();
 
-    // Ensure reveal isn't up + modal stays open during animation
+    // ✅ hide the pop-out so roulette is fully visible
+    hideModal();
     hideReveal();
 
-    // Use main grid highlight animation for 5 seconds
     const availableTeams = latestTeams.filter(isAvailable);
     const chosen = await animateRandomPick(availableTeams, 5000);
 
-    // Claim the exact team the animation landed on
     const team = await claimSpecificTeam(chosen.id, currentSponsor);
 
-    // Cleanup highlight after winning state is shown briefly
     await sleep(250);
     clearHighlights();
 
-    hideModal();
     showReveal(team, currentSponsor);
   } catch (e) {
+    // if something fails, reopen modal so you can retry
+    showModal();
     showError(e?.message || "Random allocation failed.");
   }
 });
+
 
 el("btnPick")?.addEventListener("click", () => {
   clearError();
