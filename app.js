@@ -21,13 +21,13 @@ const firebaseConfig = {
   appId: "1:10961796042:web:9dcc8d72c204abd7d4ed33"
 };
 
-/** ✅ PASSCODE (speed bump) */
+/** PASSCODE (speed bump) */
 const PASSCODE = "CHANGE_ME";
 
 /** Firestore schema */
 const COLLECTION_NAME = "teams";
 const TEAM_NAME_FIELD = "name";
-const SPONSOR_FIELD   = "sponsorName";
+const SPONSOR_FIELD = "sponsorName";
 const DEFAULT_SPONSOR = "Your Name Here";
 
 /** Assets */
@@ -49,62 +49,10 @@ const gateErr = el("gateErr");
 
 let unlocked = false;
 
-/** ---------- PASSCODE GATE ---------- */
-function showGateError(msg) {
-  gateErr.textContent = msg;
-  gateErr.classList.remove("hidden");
-}
-function clearGateError() {
-  gateErr.textContent = "";
-  gateErr.classList.add("hidden");
-}
-
-function unlockUI() {
-  unlocked = true;
-  gate.classList.add("hidden");
-  appRoot?.classList.remove("locked");
-  clearGateError();
-  // start app only once unlocked
-  startRealtime();
-}
-
-function checkPasscode(input) {
-  return String(input || "").trim() === PASSCODE;
-}
-
-function initGate() {
-  // lock UI by default
-  appRoot?.classList.add("locked");
-
-  gateBtn?.addEventListener("click", () => {
-    clearGateError();
-    if (!checkPasscode(gateCode.value)) {
-      showGateError("Incorrect passcode.");
-      gateCode.focus();
-      return;
-    }
-    unlockUI();
-  });
-
-  gateCode?.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") gateBtn?.click();
-  });
-
-  // Optional: allow passcode via URL hash: #code=XXXX
-  // Example: https://.../#code=1234
-  const hash = window.location.hash || "";
-  const m = hash.match(/code=([^&]+)/);
-  if (m) {
-    const fromHash = decodeURIComponent(m[1]);
-    if (checkPasscode(fromHash)) unlockUI();
-  }
-}
-
-initGate();
-
 /** UI refs */
 const teamsGrid = el("teamsGrid");
-const teamsMeta = el("teamsMeta");
+const teamsMeta = el("teamsMeta"); // hidden in HTML, kept for compatibility
+const teamsMetaTop = el("teamsMetaTop");
 
 const revealView = el("revealView");
 const revealTeamName = el("revealTeamName");
@@ -125,14 +73,23 @@ const pickMeta = el("pickMeta");
 let latestTeams = [];
 let currentSponsor = "";
 
+/** Preload cache */
+const preloadCache = new Set();
+
 /** ---------- helpers ---------- */
 function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, (m) => ({
-    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#039;"
   }[m]));
 }
 
 function teamKeyFromName(name) {
+  // "Lolcow Balls" -> "Lolcow_Balls"
+  // "Lolcow Cash (a)" -> "Lolcow_Cash_(a)"
   return String(name || "")
     .trim()
     .replace(/\s+/g, "_")
@@ -170,6 +127,76 @@ function requireUnlocked() {
   if (!unlocked) throw new Error("Locked. Enter passcode.");
 }
 
+function preloadImage(url) {
+  if (!url || preloadCache.has(url)) return;
+  preloadCache.add(url);
+  const img = new Image();
+  img.decoding = "async";
+  img.loading = "eager";
+  img.src = url;
+}
+
+function preloadAllAssets(teams) {
+  teams.forEach(t => {
+    preloadImage(iconUrl(t));
+    preloadImage(cardUrl(t));
+  });
+}
+
+function sleep(ms) {
+  return new Promise(res => setTimeout(res, ms));
+}
+
+/** ---------- PASSCODE GATE ---------- */
+function showGateError(msg) {
+  gateErr.textContent = msg;
+  gateErr.classList.remove("hidden");
+}
+function clearGateError() {
+  gateErr.textContent = "";
+  gateErr.classList.add("hidden");
+}
+
+function checkPasscode(input) {
+  return String(input || "").trim() === PASSCODE;
+}
+
+function unlockUI() {
+  unlocked = true;
+  gate.classList.add("hidden");
+  appRoot?.classList.remove("locked");
+  clearGateError();
+  startRealtime();
+}
+
+function initGate() {
+  // lock UI by default
+  appRoot?.classList.add("locked");
+
+  gateBtn?.addEventListener("click", () => {
+    clearGateError();
+    if (!checkPasscode(gateCode.value)) {
+      showGateError("Incorrect passcode.");
+      gateCode.focus();
+      return;
+    }
+    unlockUI();
+  });
+
+  gateCode?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") gateBtn?.click();
+  });
+
+  // Optional: allow passcode via URL hash: #code=XXXX
+  const hash = window.location.hash || "";
+  const m = hash.match(/code=([^&]+)/);
+  if (m) {
+    const fromHash = decodeURIComponent(m[1]);
+    if (checkPasscode(fromHash)) unlockUI();
+  }
+}
+initGate();
+
 /** ---------- modal ---------- */
 function setStep(which) {
   stepSponsor.classList.toggle("hidden", which !== "sponsor");
@@ -203,7 +230,7 @@ function hideModal() {
 
 function showReveal(team, sponsor) {
   revealTeamName.textContent = getTeamName(team);
-  revealTeamIcon.src = cardUrl(team); // ✅ TEAM CARD IMAGE
+  revealTeamIcon.src = cardUrl(team); // TEAM CARD image
   revealTeamIcon.alt = getTeamName(team);
   revealSponsorName.textContent = sponsor;
   revealView.classList.remove("hidden");
@@ -213,13 +240,62 @@ function hideReveal() {
   revealView.classList.add("hidden");
 }
 
+/** ---------- highlight animation helpers ---------- */
+function clearHighlights() {
+  document.querySelectorAll(".teamCard.isHighlight, .teamCard.isWinner").forEach(node => {
+    node.classList.remove("isHighlight");
+    node.classList.remove("isWinner");
+  });
+}
+
+function setHighlight(teamId, cls = "isHighlight") {
+  clearHighlights();
+  const card = document.querySelector(`.teamCard[data-id="${CSS.escape(teamId)}"]`);
+  if (card) card.classList.add(cls);
+}
+
+/**
+ * 5s decelerating highlight animation using main grid cards.
+ * Returns the chosen team object.
+ */
+async function animateRandomPick(availableTeams, durationMs = 5000) {
+  if (!availableTeams.length) throw new Error("No teams left to sponsor.");
+
+  const start = performance.now();
+  let i = 0;
+
+  while (performance.now() - start < durationMs) {
+    const t = performance.now() - start;
+    const p = Math.min(1, t / durationMs);
+
+    // interval grows over time (fast -> slow)
+    const interval = 60 + Math.floor(440 * (p * p)); // ~60ms .. ~500ms
+
+    const pick = availableTeams[i % availableTeams.length];
+    setHighlight(pick.id, "isHighlight");
+
+    i++;
+    await sleep(interval);
+  }
+
+  const finalPick = availableTeams[Math.floor(Math.random() * availableTeams.length)];
+  setHighlight(finalPick.id, "isWinner");
+  await sleep(350);
+
+  return finalPick;
+}
+
 /** ---------- render ---------- */
 function renderTeams(teams) {
   if (!teamsGrid) return;
 
   const total = teams.length;
   const available = teams.filter(isAvailable).length;
-  teamsMeta.textContent = `${available} available • ${total - available} sponsored • ${total} total`;
+  const sponsored = total - available;
+
+  // Update hidden meta (optional) + topbar meta
+  if (teamsMeta) teamsMeta.textContent = `${available} available • ${sponsored} sponsored`;
+  if (teamsMetaTop) teamsMetaTop.textContent = `${available} available • ${sponsored} sponsored`;
 
   teamsGrid.innerHTML = teams.map(t => `
     <div class="teamCard" data-id="${t.id}">
@@ -230,7 +306,6 @@ function renderTeams(teams) {
              onerror="this.onerror=null;this.src='${FALLBACK_ICON}'" />
         <div>
           <div class="teamName">${escapeHtml(getTeamName(t))}</div>
-          <div class="muted">${escapeHtml(t.id)}</div>
         </div>
       </div>
 
@@ -301,23 +376,6 @@ async function claimSpecificTeam(teamId, sponsorName) {
   });
 }
 
-async function claimRandomTeam(sponsorName) {
-  requireUnlocked();
-  let available = latestTeams.filter(isAvailable);
-  if (available.length === 0) throw new Error("No teams left to sponsor.");
-
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const pick = available[Math.floor(Math.random() * available.length)];
-    try {
-      return await claimSpecificTeam(pick.id, sponsorName);
-    } catch {
-      available = latestTeams.filter(isAvailable);
-      if (available.length === 0) break;
-    }
-  }
-  throw new Error("Random allocation conflicted. Try again.");
-}
-
 async function resetAllSponsors() {
   requireUnlocked();
   const ok = confirm(`Reset ALL sponsors back to "${DEFAULT_SPONSOR}"?`);
@@ -340,8 +398,11 @@ el("btnStart")?.addEventListener("click", () => {
 });
 
 el("btnResetAll")?.addEventListener("click", async () => {
-  try { await resetAllSponsors(); }
-  catch (e) { alert(e?.message || "Reset failed."); }
+  try {
+    await resetAllSponsors();
+  } catch (e) {
+    alert(e?.message || "Reset failed.");
+  }
 });
 
 el("btnCloseModal")?.addEventListener("click", hideModal);
@@ -364,7 +425,21 @@ el("btnRandom")?.addEventListener("click", async () => {
   clearError();
   try {
     requireUnlocked();
-    const team = await claimRandomTeam(currentSponsor);
+
+    // Ensure reveal isn't up + modal stays open during animation
+    hideReveal();
+
+    // Use main grid highlight animation for 5 seconds
+    const availableTeams = latestTeams.filter(isAvailable);
+    const chosen = await animateRandomPick(availableTeams, 5000);
+
+    // Claim the exact team the animation landed on
+    const team = await claimSpecificTeam(chosen.id, currentSponsor);
+
+    // Cleanup highlight after winning state is shown briefly
+    await sleep(250);
+    clearHighlights();
+
     hideModal();
     showReveal(team, currentSponsor);
   } catch (e) {
@@ -380,7 +455,10 @@ el("btnPick")?.addEventListener("click", () => {
 
 el("btnBackToType")?.addEventListener("click", () => setStep("type"));
 
-el("btnBackToMain")?.addEventListener("click", () => hideReveal());
+el("btnBackToMain")?.addEventListener("click", () => {
+  clearHighlights();
+  hideReveal();
+});
 
 modal?.addEventListener("click", (e) => {
   if (e.target === modal) hideModal();
@@ -398,18 +476,23 @@ function startRealtime() {
   onSnapshot(q, (snap) => {
     const teams = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-    teams.sort((a,b) => {
+    // Sort: available first, then by name
+    teams.sort((a, b) => {
       const av = isAvailable(a), bv = isAvailable(b);
       if (av !== bv) return av ? -1 : 1;
       return getTeamName(a).localeCompare(getTeamName(b));
     });
 
     latestTeams = teams;
+
+    // Preload icons + cards (avoids reveal delays)
+    preloadAllAssets(teams);
+
     renderTeams(teams);
 
     if (!stepPick.classList.contains("hidden")) renderPickGrid(teams);
   }, (err) => {
     console.error("Firestore onSnapshot error:", err);
-    teamsMeta.textContent = "Firestore error (check firebaseConfig/rules)";
+    if (teamsMetaTop) teamsMetaTop.textContent = "Firestore error";
   });
 }
