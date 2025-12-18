@@ -302,7 +302,7 @@ function renderTeams(teams) {
   if (teamsMetaTop) teamsMetaTop.textContent = `${available} available • ${sponsored} sponsored`;
 
   teamsGrid.innerHTML = teams.map(t => `
-    <div class="teamCard" data-id="${t.id}">
+    <div class="teamCard ${isAvailable(t) ? "" : "isSponsored"}" data-id="${t.id}">
       <div class="teamTop">
         <img class="teamIcon"
              src="${escapeHtml(iconUrl(t))}"
