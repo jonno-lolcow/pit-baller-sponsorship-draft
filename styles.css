@@ -425,3 +425,68 @@ input{
   color: #22c55e;
 }
 
+/* ----- Lock icon on sponsored teams ----- */
+.teamIconWrap{
+  position: relative;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+}
+
+.teamIconWrap .teamIcon{
+  width: 44px;
+  height: 44px;
+  border-radius:14px;
+  display:block;
+}
+
+.lockBadge{
+  position:absolute;
+  right:-6px;
+  bottom:-6px;
+  width:22px;
+  height:22px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:999px;
+  border:1px solid var(--line);
+  background: rgba(0,0,0,.65);
+  font-size:12px;
+  line-height:1;
+}
+
+/* Sponsored teams = green sponsor name */
+.teamCard.isSponsored .sponsorName{
+  color: #22c55e;
+}
+
+/* ----- Fade/lock animation when team becomes sponsored ----- */
+@keyframes lockFadeIn {
+  0%   { opacity: 0; transform: translateY(2px) scale(.98); filter: saturate(1); }
+  60%  { opacity: 1; transform: translateY(0) scale(1.02); }
+  100% { opacity: 1; transform: translateY(0) scale(1); filter: saturate(1.1); }
+}
+
+@keyframes lockPulseBorder {
+  0%   { box-shadow: 0 0 0 0 rgba(34,197,94,.00); }
+  30%  { box-shadow: 0 0 0 8px rgba(34,197,94,.18); }
+  100% { box-shadow: 0 0 0 0 rgba(34,197,94,.00); }
+}
+
+/* runs once when it flips from available -> sponsored */
+.teamCard.justSponsored{
+  animation: lockFadeIn .55s ease-out both, lockPulseBorder .9s ease-out both;
+}
+
+/* ----- Sponsor name pulse on reveal (pop-out) ----- */
+@keyframes sponsorPop {
+  0%   { transform: scale(1); filter: brightness(1); }
+  30%  { transform: scale(1.08); filter: brightness(1.15); }
+  100% { transform: scale(1); filter: brightness(1); }
+}
+
+/* applies to the sponsor text inside the reveal headline */
+.revealHeadline{
+  animation: sponsorPop .6s ease-out;
+}
