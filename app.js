@@ -25,10 +25,9 @@ const firebaseConfig = {
 const COLLECTION_NAME = "teams";
 
 /** If your doc fields differ, adjust these */
+const COLLECTION_NAME = "teams";
 const TEAM_NAME_FIELD = "name";
-const TEAM_ICON_FIELD = "iconUrl";     // can be full URL, "img/teams/x.png", "/img/teams/x.png", or "x.png"
 const SPONSOR_FIELD   = "sponsorName";
-
 const DEFAULT_SPONSOR = "Your Name Here";
 
 /**
@@ -88,9 +87,26 @@ function resolveIconUrl(raw) {
   return `${TEAMS_ICON_BASE}${v}`;
 }
 
-function getTeamIcon(team) {
-  return resolveIconUrl(team?.[TEAM_ICON_FIELD]);
+function teamKeyFromName(name) {
+  // "Lolcow Balls" -> "Lolcow_Balls"
+  // "Lolcow Cash (a)" -> "Lolcow_Cash_(a)"
+  return String(name || "")
+    .trim()
+    .replace(/\s+/g, "_")
+    .replace(/[^A-Za-z0-9_()]/g, "");
 }
+
+function getTeamIcon(team) {
+  const key = teamKeyFromName(team[TEAM_NAME_FIELD]);
+  return `img/icons/${key}.png`;
+}
+
+function getTeamCard(team) {
+  const key = teamKeyFromName(team[TEAM_NAME_FIELD]);
+  return `img/teams/${key}.png`;
+}
+
+revealTeamIcon.src = getTeamCard(team);
 
 function getSponsor(team) {
   return team?.[SPONSOR_FIELD] ?? DEFAULT_SPONSOR;
