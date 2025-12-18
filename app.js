@@ -229,10 +229,14 @@ function hideModal() {
 }
 
 function showReveal(team, sponsor) {
+  const headline = el("revealHeadline");
+  if (headline) headline.textContent = `Sponsor Allocated • ${sponsor}`;
+
   revealTeamName.textContent = getTeamName(team);
+
   revealTeamIcon.src = cardUrl(team); // TEAM CARD image
   revealTeamIcon.alt = getTeamName(team);
-  revealSponsorName.textContent = sponsor;
+
   revealView.classList.remove("hidden");
 }
 
