@@ -48,30 +48,22 @@
         <div id="teamsGrid" class="teamsGrid" aria-live="polite"></div>
       </section>
 
-      <!-- REVEAL VIEW -->
-      <section id="revealView" class="reveal hidden" aria-live="polite">
-        <div class="revealCard">
-          <div class="revealTop">
-            <div>
-              <div class="revealKicker">Sponsor Allocated</div>
-              <div id="revealTeamName" class="revealTeamName">—</div>
-            </div>
-            <button id="btnBackToMain" class="btn">Back</button>
-          </div>
+<!-- REVEAL POP-OUT -->
+<section id="revealView" class="revealModal hidden" aria-live="polite">
+  <div class="revealCardLarge">
+    <div class="revealTop">
+      <div id="revealHeadline" class="revealHeadline">Sponsor Allocated</div>
+      <button id="btnBackToMain" class="btn">Close</button>
+    </div>
 
-          <div class="revealBody">
-            <div class="revealTeam">
-              <img id="revealTeamIcon" alt="" />
-            </div>
-
-            <div class="revealSponsor">
-              <div class="label">Sponsor</div>
-              <div id="revealSponsorName" class="sponsorName">—</div>
-              <div class="muted small">Saved to Firestore</div>
-            </div>
-          </div>
-        </div>
-      </section>
+    <div class="revealBodyLarge">
+      <img id="revealTeamIcon" class="revealImg" alt="" />
+      <div class="revealInfo">
+        <div id="revealTeamName" class="revealTeamNameSm">—</div>
+      </div>
+    </div>
+  </div>
+</section>
 
     </main>
   </div>
