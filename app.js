@@ -11,29 +11,52 @@ import {
   writeBatch
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
-/** ✅ EDIT: paste the same Firebase config from Pit Ballers */
+import {
+  getAuth,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signOut,
+  onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+
+/** ✅ Firebase config (same project as Pit Ballers) */
 const firebaseConfig = {
-      apiKey: "AIzaSyB23VXC2PvAMx9foZoa22ciyku7Dghf5jQ",
-      authDomain: "pit-ballers.firebaseapp.com",
-      projectId: "pit-ballers",
-      storageBucket: "pit-ballers.appspot.com",
-      messagingSenderId: "10961796042",
-      appId: "1:10961796042:web:9dcc8d72c204abd7d4ed33"
+  apiKey: "AIzaSyB23VXC2PvAMx9foZoa22ciyku7Dghf5jQ",
+  authDomain: "pit-ballers.firebaseapp.com",
+  projectId: "pit-ballers",
+  storageBucket: "pit-ballers.appspot.com",
+  messagingSenderId: "10961796042",
+  appId: "1:10961796042:web:9dcc8d72c204abd7d4ed33"
 };
 
-/** If your doc fields differ, adjust these */
+/** ✅ Firestore schema */
 const COLLECTION_NAME = "teams";
 const TEAM_NAME_FIELD = "name";
 const SPONSOR_FIELD   = "sponsorName";
 const DEFAULT_SPONSOR = "Your Name Here";
 
+/** ✅ Assets */
 const ICONS_DIR = "img/icons/";
 const CARDS_DIR = "img/teams/";
 const FALLBACK_ICON = "img/icons/team-fallback.png";
 
+/**
+ * ✅ ADMIN CONTROL
+ * 1) Deploy once with ADMIN_UID = "".
+ * 2) Login on the site (Google popup).
+ * 3) Copy UID from console log.
+ * 4) Paste it here AND into Firestore rules.
+ */
+const ADMIN_UID = ""; // <-- paste your UID here once known
+
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
+/** Auth */
+const auth = getAuth(app);
+const provider = new GoogleAuthProvider();
+
+/** DOM helper */
 const el = (id) => document.getElementById(id);
 
 /** UI refs */
@@ -56,8 +79,18 @@ const sponsorInput = el("sponsorInput");
 const pickGrid = el("pickGrid");
 const pickMeta = el("pickMeta");
 
+/** Auth UI (add these elements in index.html topbarActions):
+ *  <span id="authStatus" class="muted">Not signed in</span>
+ *  <button id="btnLogin" class="btn">Login</button>
+ *  <button id="btnLogout" class="btn hidden">Logout</button>
+ */
+const authStatus = el("authStatus");
+const btnLogin = el("btnLogin");
+const btnLogout = el("btnLogout");
+
 let latestTeams = [];
 let currentSponsor = "";
+let isAdmin = false;
 
 /** ---------- helpers ---------- */
 function escapeHtml(str) {
@@ -102,6 +135,58 @@ function cleanSponsorName(raw) {
   return s ? s.slice(0, 40) : "";
 }
 
+function requireAdmin() {
+  if (!isAdmin) throw new Error("Admin login required.");
+}
+
+/** ---------- auth wiring ---------- */
+function setAdminUI() {
+  const startBtn = el("btnStart");
+  const resetBtn = el("btnResetAll");
+
+  if (startBtn) startBtn.disabled = !isAdmin;
+  if (resetBtn) resetBtn.disabled = !isAdmin;
+
+  // If not admin, close any admin flows
+  if (!isAdmin) {
+    hideModal();
+  }
+}
+
+if (btnLogin) {
+  btnLogin.addEventListener("click", async () => {
+    await signInWithPopup(auth, provider);
+  });
+}
+
+if (btnLogout) {
+  btnLogout.addEventListener("click", async () => {
+    await signOut(auth);
+  });
+}
+
+onAuthStateChanged(auth, (user) => {
+  if (!user) {
+    isAdmin = false;
+    if (authStatus) authStatus.textContent = "Not signed in";
+    if (btnLogin) btnLogin.classList.remove("hidden");
+    if (btnLogout) btnLogout.classList.add("hidden");
+    setAdminUI();
+    return;
+  }
+
+  // show UID once so you can paste it into ADMIN_UID + Firestore rules
+  console.log("Firebase UID:", user.uid);
+
+  if (authStatus) authStatus.textContent = `Signed in: ${user.email || user.uid}`;
+  if (btnLogin) btnLogin.classList.add("hidden");
+  if (btnLogout) btnLogout.classList.remove("hidden");
+
+  isAdmin = Boolean(ADMIN_UID) && user.uid === ADMIN_UID;
+  if (authStatus && !isAdmin) authStatus.textContent += " (not admin)";
+  setAdminUI();
+});
+
 /** ---------- modal ---------- */
 function setStep(which) {
   stepSponsor.classList.toggle("hidden", which !== "sponsor");
@@ -119,6 +204,8 @@ function clearError() {
 }
 
 function showModal() {
+  try { requireAdmin(); } catch (e) { alert(e.message); return; }
+
   modal.classList.remove("hidden");
   clearError();
   sponsorInput.value = "";
@@ -133,7 +220,7 @@ function hideModal() {
 
 function showReveal(team, sponsor) {
   revealTeamName.textContent = getTeamName(team);
-  revealTeamIcon.src = cardUrl(team);          // ✅ TEAM CARD IMAGE
+  revealTeamIcon.src = cardUrl(team); // ✅ TEAM CARD IMAGE
   revealTeamIcon.alt = getTeamName(team);
   revealSponsorName.textContent = sponsor;
   revealView.classList.remove("hidden");
@@ -193,6 +280,7 @@ function renderPickGrid(teams) {
       clearError();
       const teamId = btn.getAttribute("data-id");
       try {
+        requireAdmin();
         const team = await claimSpecificTeam(teamId, currentSponsor);
         hideModal();
         showReveal(team, currentSponsor);
@@ -209,6 +297,7 @@ function teamsCollectionRef() {
 }
 
 async function claimSpecificTeam(teamId, sponsorName) {
+  requireAdmin();
   const ref = doc(db, COLLECTION_NAME, teamId);
 
   return await runTransaction(db, async (tx) => {
@@ -230,6 +319,7 @@ async function claimSpecificTeam(teamId, sponsorName) {
 }
 
 async function claimRandomTeam(sponsorName) {
+  requireAdmin();
   let available = latestTeams.filter(isAvailable);
   if (available.length === 0) throw new Error("No teams left to sponsor.");
 
@@ -246,6 +336,7 @@ async function claimRandomTeam(sponsorName) {
 }
 
 async function resetAllSponsors() {
+  requireAdmin();
   const ok = confirm(`Reset ALL sponsors back to "${DEFAULT_SPONSOR}"?`);
   if (!ok) return;
 
@@ -260,19 +351,22 @@ async function resetAllSponsors() {
 }
 
 /** ---------- events ---------- */
-el("btnStart").addEventListener("click", () => {
+el("btnStart")?.addEventListener("click", () => {
   hideReveal();
   showModal();
 });
 
-el("btnResetAll").addEventListener("click", async () => {
-  try { await resetAllSponsors(); }
-  catch (e) { alert(e?.message || "Reset failed."); }
+el("btnResetAll")?.addEventListener("click", async () => {
+  try {
+    await resetAllSponsors();
+  } catch (e) {
+    alert(e?.message || "Reset failed.");
+  }
 });
 
-el("btnCloseModal").addEventListener("click", hideModal);
+el("btnCloseModal")?.addEventListener("click", hideModal);
 
-el("btnNextToType").addEventListener("click", () => {
+el("btnNextToType")?.addEventListener("click", () => {
   clearError();
   const name = cleanSponsorName(sponsorInput.value);
   if (!name) return showError("Enter a sponsor name.");
@@ -280,15 +374,16 @@ el("btnNextToType").addEventListener("click", () => {
   setStep("type");
 });
 
-sponsorInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") el("btnNextToType").click();
+sponsorInput?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") el("btnNextToType")?.click();
 });
 
-el("btnBackToSponsor").addEventListener("click", () => setStep("sponsor"));
+el("btnBackToSponsor")?.addEventListener("click", () => setStep("sponsor"));
 
-el("btnRandom").addEventListener("click", async () => {
+el("btnRandom")?.addEventListener("click", async () => {
   clearError();
   try {
+    requireAdmin();
     const team = await claimRandomTeam(currentSponsor);
     hideModal();
     showReveal(team, currentSponsor);
@@ -297,17 +392,17 @@ el("btnRandom").addEventListener("click", async () => {
   }
 });
 
-el("btnPick").addEventListener("click", () => {
+el("btnPick")?.addEventListener("click", () => {
   clearError();
   renderPickGrid(latestTeams);
   setStep("pick");
 });
 
-el("btnBackToType").addEventListener("click", () => setStep("type"));
+el("btnBackToType")?.addEventListener("click", () => setStep("type"));
 
-el("btnBackToMain").addEventListener("click", () => hideReveal());
+el("btnBackToMain")?.addEventListener("click", () => hideReveal());
 
-modal.addEventListener("click", (e) => {
+modal?.addEventListener("click", (e) => {
   if (e.target === modal) hideModal();
 });
 
@@ -334,4 +429,3 @@ modal.addEventListener("click", (e) => {
     teamsMeta.textContent = "Firestore error (check firebaseConfig/rules)";
   });
 })();
-
