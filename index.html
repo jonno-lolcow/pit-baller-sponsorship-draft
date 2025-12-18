@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Pit Baller – Sponsorship Draft</title>
+  <link rel="icon" href="img/icons/favicon.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img class="brandIcon" src="img/icons/pitballer-icon.png" alt="" />
+      <div>
+        <div class="kicker">Pit Baller</div>
+        <h1>Sponsorship Draft</h1>
+        <div class="muted">Enter sponsor → allocation type → reveal → repeat</div>
+      </div>
+    </div>
+
+    <div class="topbarActions">
+      <button id="btnStart" class="btn primary">New Sponsorship</button>
+      <button id="btnResetAll" class="btn danger">Reset All</button>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="gridWrap">
+      <div class="sectionTitle">
+        <h2>Teams</h2>
+        <div class="muted" id="teamsMeta">—</div>
+      </div>
+
+      <div id="teamsGrid" class="teamsGrid" aria-live="polite"></div>
+    </section>
+
+    <!-- REVEAL -->
+    <section id="revealView" class="reveal hidden" aria-live="polite">
+      <div class="revealCard">
+        <div class="revealTop">
+          <div>
+            <div class="revealKicker">Sponsor Allocated</div>
+            <div id="revealTeamName" class="revealTeamName">—</div>
+          </div>
+          <button id="btnBackToMain" class="btn">Back</button>
+        </div>
+
+        <div class="revealBody">
+          <div class="revealTeam">
+            <img id="revealTeamIcon" alt="" />
+          </div>
+          <div class="revealSponsor">
+            <div class="label">Sponsor</div>
+            <div id="revealSponsorName" class="sponsorName">—</div>
+            <div class="muted small">Saved to Firestore</div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- MODAL -->
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modalCard">
+      <div class="modalHeader">
+        <h3 id="modalTitle">New Sponsorship</h3>
+        <button id="btnCloseModal" class="iconBtn" aria-label="Close">✕</button>
+      </div>
+
+      <!-- Step 1 -->
+      <div id="stepSponsor" class="modalStep">
+        <label class="field">
+          <span class="fieldLabel">Sponsor Name</span>
+          <input id="sponsorInput" type="text" maxlength="40" placeholder="Enter sponsor name…" autocomplete="off" />
+        </label>
+
+        <div class="row">
+          <button id="btnNextToType" class="btn primary">Next</button>
+        </div>
+
+        <div class="hint">
+          Stream operator: type sponsor from donation message → Next
+        </div>
+      </div>
+
+      <!-- Step 2 -->
+      <div id="stepType" class="modalStep hidden">
+        <div class="pillRow">
+          <button id="btnRandom" class="btn primary">Random Allocation</button>
+          <button id="btnPick" class="btn">Pick a Team</button>
+        </div>
+
+        <div class="hint">
+          Random = lower donation. Pick = higher donation.
+        </div>
+
+        <div class="row">
+          <button id="btnBackToSponsor" class="btn">Back</button>
+        </div>
+      </div>
+
+      <!-- Step 3 -->
+      <div id="stepPick" class="modalStep hidden">
+        <div class="sectionTitle tight">
+          <h4>Choose an Unsponsored Team</h4>
+          <div class="muted" id="pickMeta">—</div>
+        </div>
+
+        <div id="pickGrid" class="pickGrid"></div>
+
+        <div class="row">
+          <button id="btnBackToType" class="btn">Back</button>
+        </div>
+      </div>
+
+      <div id="modalError" class="error hidden"></div>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
