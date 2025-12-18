@@ -234,7 +234,7 @@ function showReveal(team, sponsor) {
 
   revealTeamName.textContent = getTeamName(team);
 
-  revealTeamIcon.src = cardUrl(team); // TEAM CARD image
+  revealTeamIcon.src = cardUrl(team);
   revealTeamIcon.alt = getTeamName(team);
 
   revealView.classList.remove("hidden");
