@@ -1,0 +1,341 @@
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+import {
+  getFirestore,
+  collection,
+  doc,
+  getDocs,
+  onSnapshot,
+  query,
+  serverTimestamp,
+  runTransaction,
+  writeBatch
+} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+
+/** ✅ EDIT: paste the same Firebase config from Pit Ballers */
+const firebaseConfig = {
+      apiKey: "AIzaSyB23VXC2PvAMx9foZoa22ciyku7Dghf5jQ",
+      authDomain: "pit-ballers.firebaseapp.com",
+      projectId: "pit-ballers",
+      storageBucket: "pit-ballers.appspot.com",
+      messagingSenderId: "10961796042",
+      appId: "1:10961796042:web:9dcc8d72c204abd7d4ed33"
+};
+
+/** ✅ EDIT: same collection Pit Ballers reads */
+const COLLECTION_NAME = "teams";
+
+/** If your doc fields differ, adjust these */
+const TEAM_NAME_FIELD = "name";
+const TEAM_ICON_FIELD = "iconUrl";     // can be full URL, "img/teams/x.png", "/img/teams/x.png", or "x.png"
+const SPONSOR_FIELD   = "sponsorName";
+
+const DEFAULT_SPONSOR = "Your Name Here";
+
+/**
+ * If TEAM_ICON_FIELD is just a filename like "reapers.png",
+ * we'll serve it from /img/teams/
+ */
+const TEAMS_ICON_BASE = "img/teams/";   // your folder
+const FALLBACK_ICON   = "img/icons/team-fallback.png";
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+const el = (id) => document.getElementById(id);
+
+/** UI refs */
+const teamsGrid = el("teamsGrid");
+const teamsMeta = el("teamsMeta");
+
+const revealView = el("revealView");
+const revealTeamName = el("revealTeamName");
+const revealTeamIcon = el("revealTeamIcon");
+const revealSponsorName = el("revealSponsorName");
+
+const modal = el("modal");
+const modalError = el("modalError");
+
+const stepSponsor = el("stepSponsor");
+const stepType = el("stepType");
+const stepPick = el("stepPick");
+
+const sponsorInput = el("sponsorInput");
+const pickGrid = el("pickGrid");
+const pickMeta = el("pickMeta");
+
+let latestTeams = [];
+let currentSponsor = "";
+
+/** ---------- Helpers ---------- */
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, (m) => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+  }[m]));
+}
+
+function getTeamName(team) {
+  return team?.[TEAM_NAME_FIELD] ?? "Unknown Team";
+}
+
+function resolveIconUrl(raw) {
+  const v = (raw ?? "").toString().trim();
+  if (!v) return FALLBACK_ICON;
+
+  // already absolute (https://) or root-relative (/img/teams/x.png) or relative (img/teams/x.png)
+  if (v.startsWith("http://") || v.startsWith("https://") || v.startsWith("/") || v.startsWith("img/")) return v;
+
+  // treat as filename stored in Firestore
+  return `${TEAMS_ICON_BASE}${v}`;
+}
+
+function getTeamIcon(team) {
+  return resolveIconUrl(team?.[TEAM_ICON_FIELD]);
+}
+
+function getSponsor(team) {
+  return team?.[SPONSOR_FIELD] ?? DEFAULT_SPONSOR;
+}
+
+function isAvailable(team) {
+  return (getSponsor(team) || DEFAULT_SPONSOR) === DEFAULT_SPONSOR;
+}
+
+function cleanSponsorName(raw) {
+  const s = (raw || "").trim().replace(/\s+/g, " ");
+  return s ? s.slice(0, 40) : "";
+}
+
+/** ---------- Steps ---------- */
+function setStep(which) {
+  stepSponsor.classList.toggle("hidden", which !== "sponsor");
+  stepType.classList.toggle("hidden", which !== "type");
+  stepPick.classList.toggle("hidden", which !== "pick");
+}
+
+function showError(msg) {
+  modalError.textContent = msg;
+  modalError.classList.remove("hidden");
+}
+function clearError() {
+  modalError.classList.add("hidden");
+  modalError.textContent = "";
+}
+
+function showModal() {
+  modal.classList.remove("hidden");
+  clearError();
+  sponsorInput.value = "";
+  currentSponsor = "";
+  setStep("sponsor");
+  sponsorInput.focus();
+}
+function hideModal() {
+  modal.classList.add("hidden");
+}
+
+function showReveal(team, sponsor) {
+  revealTeamName.textContent = getTeamName(team);
+  revealTeamIcon.src = getTeamIcon(team);
+  revealTeamIcon.alt = getTeamName(team);
+  revealSponsorName.textContent = sponsor;
+  revealView.classList.remove("hidden");
+  window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+}
+function hideReveal() {
+  revealView.classList.add("hidden");
+}
+
+/** ---------- Rendering ---------- */
+function renderTeams(teams) {
+  const total = teams.length;
+  const available = teams.filter(isAvailable).length;
+  teamsMeta.textContent = `${available} available • ${total - available} sponsored • ${total} total`;
+
+  teamsGrid.innerHTML = teams.map(t => {
+    const sponsor = getSponsor(t);
+    const icon = getTeamIcon(t);
+    const name = getTeamName(t);
+    return `
+      <div class="teamCard" data-id="${t.id}">
+        <div class="teamTop">
+          <img class="teamIcon" src="${escapeHtml(icon)}" alt="${escapeHtml(name)}"
+               onerror="this.onerror=null;this.src='${FALLBACK_ICON}'" />
+          <div>
+            <div class="teamName">${escapeHtml(name)}</div>
+            <div class="muted">${escapeHtml(t.id)}</div>
+          </div>
+        </div>
+        <div class="teamSponsor">
+          <div class="label">Sponsor</div>
+          <div class="sponsorName">${escapeHtml(sponsor)}</div>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+function renderPickGrid(teams) {
+  const availableTeams = teams.filter(isAvailable);
+  pickMeta.textContent = `${availableTeams.length} teams available`;
+
+  pickGrid.innerHTML = availableTeams.map(t => {
+    const icon = getTeamIcon(t);
+    const name = getTeamName(t);
+    return `
+      <button class="pickBtn" data-id="${t.id}">
+        <img src="${escapeHtml(icon)}" alt="${escapeHtml(name)}"
+             onerror="this.onerror=null;this.src='${FALLBACK_ICON}'" />
+        <div>
+          <div style="font-weight:980">${escapeHtml(name)}</div>
+          <div class="muted">Click to sponsor</div>
+        </div>
+      </button>
+    `;
+  }).join("");
+
+  pickGrid.querySelectorAll(".pickBtn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      clearError();
+      const teamId = btn.getAttribute("data-id");
+      try {
+        const team = await claimSpecificTeam(teamId, currentSponsor);
+        hideModal();
+        showReveal(team, currentSponsor);
+      } catch (e) {
+        showError(e?.message || "Couldn’t claim that team. Try again.");
+      }
+    });
+  });
+}
+
+/** ---------- Firestore ops ---------- */
+function teamsCollectionRef() {
+  return collection(db, COLLECTION_NAME);
+}
+
+async function claimSpecificTeam(teamId, sponsorName) {
+  const ref = doc(db, COLLECTION_NAME, teamId);
+
+  return await runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists()) throw new Error("Team not found.");
+
+    const data = snap.data();
+    const current = (data?.[SPONSOR_FIELD] ?? DEFAULT_SPONSOR);
+    if (current !== DEFAULT_SPONSOR) throw new Error("That team already has a sponsor.");
+
+    tx.update(ref, {
+      [SPONSOR_FIELD]: sponsorName,
+      updatedAt: serverTimestamp()
+    });
+
+    return { id: teamId, ...data, [SPONSOR_FIELD]: sponsorName };
+  });
+}
+
+async function claimRandomTeam(sponsorName) {
+  let available = latestTeams.filter(isAvailable);
+  if (available.length === 0) throw new Error("No teams left to sponsor.");
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const pick = available[Math.floor(Math.random() * available.length)];
+    try {
+      return await claimSpecificTeam(pick.id, sponsorName);
+    } catch {
+      available = latestTeams.filter(isAvailable);
+      if (available.length === 0) break;
+    }
+  }
+  throw new Error("Random allocation conflicted. Try again.");
+}
+
+async function resetAllSponsors() {
+  const ok = confirm(`Reset ALL sponsors back to "${DEFAULT_SPONSOR}"?`);
+  if (!ok) return;
+
+  const snap = await getDocs(teamsCollectionRef());
+  if (snap.empty) {
+    alert("No team documents found to reset.");
+    return;
+  }
+
+  const batch = writeBatch(db);
+  snap.forEach((d) => {
+    batch.update(d.ref, { [SPONSOR_FIELD]: DEFAULT_SPONSOR, updatedAt: serverTimestamp() });
+  });
+
+  await batch.commit();
+}
+
+/** ---------- Events ---------- */
+el("btnStart").addEventListener("click", () => {
+  hideReveal();
+  showModal();
+});
+
+el("btnResetAll").addEventListener("click", async () => {
+  try { await resetAllSponsors(); }
+  catch (e) { alert(e?.message || "Reset failed."); }
+});
+
+el("btnCloseModal").addEventListener("click", hideModal);
+
+el("btnNextToType").addEventListener("click", () => {
+  clearError();
+  const name = cleanSponsorName(sponsorInput.value);
+  if (!name) return showError("Enter a sponsor name.");
+  currentSponsor = name;
+  setStep("type");
+});
+
+sponsorInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") el("btnNextToType").click();
+});
+
+el("btnBackToSponsor").addEventListener("click", () => setStep("sponsor"));
+
+el("btnRandom").addEventListener("click", async () => {
+  clearError();
+  try {
+    const team = await claimRandomTeam(currentSponsor);
+    hideModal();
+    showReveal(team, currentSponsor);
+  } catch (e) {
+    showError(e?.message || "Random allocation failed.");
+  }
+});
+
+el("btnPick").addEventListener("click", () => {
+  clearError();
+  renderPickGrid(latestTeams);
+  setStep("pick");
+});
+
+el("btnBackToType").addEventListener("click", () => setStep("type"));
+
+el("btnBackToMain").addEventListener("click", () => hideReveal());
+
+modal.addEventListener("click", (e) => {
+  if (e.target === modal) hideModal();
+});
+
+/** ---------- Boot realtime ---------- */
+(function init() {
+  const q = query(teamsCollectionRef());
+
+  onSnapshot(q, (snap) => {
+    const teams = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    teams.sort((a,b) => {
+      const av = isAvailable(a), bv = isAvailable(b);
+      if (av !== bv) return av ? -1 : 1;
+      return getTeamName(a).localeCompare(getTeamName(b));
+    });
+
+    latestTeams = teams;
+    renderTeams(teams);
+
+    if (!stepPick.classList.contains("hidden")) renderPickGrid(teams);
+  }, () => {
+    teamsMeta.textContent = "Firestore error (check rules/config/collection name)";
+  });
+})();
