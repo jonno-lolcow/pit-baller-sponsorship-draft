@@ -11,15 +11,7 @@ import {
   writeBatch
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
-import {
-  getAuth,
-  GoogleAuthProvider,
-  signInWithPopup,
-  signOut,
-  onAuthStateChanged
-} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-
-/** ✅ Firebase config (same project as Pit Ballers) */
+/** Firebase config */
 const firebaseConfig = {
   apiKey: "AIzaSyB23VXC2PvAMx9foZoa22ciyku7Dghf5jQ",
   authDomain: "pit-ballers.firebaseapp.com",
@@ -29,35 +21,86 @@ const firebaseConfig = {
   appId: "1:10961796042:web:9dcc8d72c204abd7d4ed33"
 };
 
-/** ✅ Firestore schema */
+/** ✅ PASSCODE (speed bump) */
+const PASSCODE = "CHANGE_ME";
+
+/** Firestore schema */
 const COLLECTION_NAME = "teams";
 const TEAM_NAME_FIELD = "name";
 const SPONSOR_FIELD   = "sponsorName";
 const DEFAULT_SPONSOR = "Your Name Here";
 
-/** ✅ Assets */
+/** Assets */
 const ICONS_DIR = "img/icons/";
 const CARDS_DIR = "img/teams/";
 const FALLBACK_ICON = "img/icons/team-fallback.png";
 
-/**
- * ✅ ADMIN CONTROL
- * 1) Deploy once with ADMIN_UID = "".
- * 2) Login on the site (Google popup).
- * 3) Copy UID from console log.
- * 4) Paste it here AND into Firestore rules.
- */
-const ADMIN_UID = ""; // <-- paste your UID here once known
-
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-/** Auth */
-const auth = getAuth(app);
-const provider = new GoogleAuthProvider();
-
-/** DOM helper */
 const el = (id) => document.getElementById(id);
+
+/** Gate elements */
+const appRoot = el("appRoot");
+const gate = el("gate");
+const gateCode = el("gateCode");
+const gateBtn = el("gateBtn");
+const gateErr = el("gateErr");
+
+let unlocked = false;
+
+/** ---------- PASSCODE GATE ---------- */
+function showGateError(msg) {
+  gateErr.textContent = msg;
+  gateErr.classList.remove("hidden");
+}
+function clearGateError() {
+  gateErr.textContent = "";
+  gateErr.classList.add("hidden");
+}
+
+function unlockUI() {
+  unlocked = true;
+  gate.classList.add("hidden");
+  appRoot?.classList.remove("locked");
+  clearGateError();
+  // start app only once unlocked
+  startRealtime();
+}
+
+function checkPasscode(input) {
+  return String(input || "").trim() === PASSCODE;
+}
+
+function initGate() {
+  // lock UI by default
+  appRoot?.classList.add("locked");
+
+  gateBtn?.addEventListener("click", () => {
+    clearGateError();
+    if (!checkPasscode(gateCode.value)) {
+      showGateError("Incorrect passcode.");
+      gateCode.focus();
+      return;
+    }
+    unlockUI();
+  });
+
+  gateCode?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") gateBtn?.click();
+  });
+
+  // Optional: allow passcode via URL hash: #code=XXXX
+  // Example: https://.../#code=1234
+  const hash = window.location.hash || "";
+  const m = hash.match(/code=([^&]+)/);
+  if (m) {
+    const fromHash = decodeURIComponent(m[1]);
+    if (checkPasscode(fromHash)) unlockUI();
+  }
+}
+
+initGate();
 
 /** UI refs */
 const teamsGrid = el("teamsGrid");
@@ -79,18 +122,8 @@ const sponsorInput = el("sponsorInput");
 const pickGrid = el("pickGrid");
 const pickMeta = el("pickMeta");
 
-/** Auth UI (add these elements in index.html topbarActions):
- *  <span id="authStatus" class="muted">Not signed in</span>
- *  <button id="btnLogin" class="btn">Login</button>
- *  <button id="btnLogout" class="btn hidden">Logout</button>
- */
-const authStatus = el("authStatus");
-const btnLogin = el("btnLogin");
-const btnLogout = el("btnLogout");
-
 let latestTeams = [];
 let currentSponsor = "";
-let isAdmin = false;
 
 /** ---------- helpers ---------- */
 function escapeHtml(str) {
@@ -100,8 +133,6 @@ function escapeHtml(str) {
 }
 
 function teamKeyFromName(name) {
-  // "Lolcow Balls" -> "Lolcow_Balls"
-  // "Lolcow Cash (a)" -> "Lolcow_Cash_(a)"
   return String(name || "")
     .trim()
     .replace(/\s+/g, "_")
@@ -135,57 +166,9 @@ function cleanSponsorName(raw) {
   return s ? s.slice(0, 40) : "";
 }
 
-function requireAdmin() {
-  if (!isAdmin) throw new Error("Admin login required.");
+function requireUnlocked() {
+  if (!unlocked) throw new Error("Locked. Enter passcode.");
 }
-
-/** ---------- auth wiring ---------- */
-function setAdminUI() {
-  const startBtn = el("btnStart");
-  const resetBtn = el("btnResetAll");
-
-  if (startBtn) startBtn.disabled = !isAdmin;
-  if (resetBtn) resetBtn.disabled = !isAdmin;
-
-  // If not admin, close any admin flows
-  if (!isAdmin) {
-    hideModal();
-  }
-}
-
-if (btnLogin) {
-  btnLogin.addEventListener("click", async () => {
-    await signInWithPopup(auth, provider);
-  });
-}
-
-if (btnLogout) {
-  btnLogout.addEventListener("click", async () => {
-    await signOut(auth);
-  });
-}
-
-onAuthStateChanged(auth, (user) => {
-  if (!user) {
-    isAdmin = false;
-    if (authStatus) authStatus.textContent = "Not signed in";
-    if (btnLogin) btnLogin.classList.remove("hidden");
-    if (btnLogout) btnLogout.classList.add("hidden");
-    setAdminUI();
-    return;
-  }
-
-  // show UID once so you can paste it into ADMIN_UID + Firestore rules
-  console.log("Firebase UID:", user.uid);
-
-  if (authStatus) authStatus.textContent = `Signed in: ${user.email || user.uid}`;
-  if (btnLogin) btnLogin.classList.add("hidden");
-  if (btnLogout) btnLogout.classList.remove("hidden");
-
-  isAdmin = Boolean(ADMIN_UID) && user.uid === ADMIN_UID;
-  if (authStatus && !isAdmin) authStatus.textContent += " (not admin)";
-  setAdminUI();
-});
 
 /** ---------- modal ---------- */
 function setStep(which) {
@@ -204,7 +187,7 @@ function clearError() {
 }
 
 function showModal() {
-  try { requireAdmin(); } catch (e) { alert(e.message); return; }
+  try { requireUnlocked(); } catch (e) { alert(e.message); return; }
 
   modal.classList.remove("hidden");
   clearError();
@@ -280,7 +263,7 @@ function renderPickGrid(teams) {
       clearError();
       const teamId = btn.getAttribute("data-id");
       try {
-        requireAdmin();
+        requireUnlocked();
         const team = await claimSpecificTeam(teamId, currentSponsor);
         hideModal();
         showReveal(team, currentSponsor);
@@ -297,7 +280,7 @@ function teamsCollectionRef() {
 }
 
 async function claimSpecificTeam(teamId, sponsorName) {
-  requireAdmin();
+  requireUnlocked();
   const ref = doc(db, COLLECTION_NAME, teamId);
 
   return await runTransaction(db, async (tx) => {
@@ -319,7 +302,7 @@ async function claimSpecificTeam(teamId, sponsorName) {
 }
 
 async function claimRandomTeam(sponsorName) {
-  requireAdmin();
+  requireUnlocked();
   let available = latestTeams.filter(isAvailable);
   if (available.length === 0) throw new Error("No teams left to sponsor.");
 
@@ -336,7 +319,7 @@ async function claimRandomTeam(sponsorName) {
 }
 
 async function resetAllSponsors() {
-  requireAdmin();
+  requireUnlocked();
   const ok = confirm(`Reset ALL sponsors back to "${DEFAULT_SPONSOR}"?`);
   if (!ok) return;
 
@@ -357,11 +340,8 @@ el("btnStart")?.addEventListener("click", () => {
 });
 
 el("btnResetAll")?.addEventListener("click", async () => {
-  try {
-    await resetAllSponsors();
-  } catch (e) {
-    alert(e?.message || "Reset failed.");
-  }
+  try { await resetAllSponsors(); }
+  catch (e) { alert(e?.message || "Reset failed."); }
 });
 
 el("btnCloseModal")?.addEventListener("click", hideModal);
@@ -383,7 +363,7 @@ el("btnBackToSponsor")?.addEventListener("click", () => setStep("sponsor"));
 el("btnRandom")?.addEventListener("click", async () => {
   clearError();
   try {
-    requireAdmin();
+    requireUnlocked();
     const team = await claimRandomTeam(currentSponsor);
     hideModal();
     showReveal(team, currentSponsor);
@@ -406,14 +386,18 @@ modal?.addEventListener("click", (e) => {
   if (e.target === modal) hideModal();
 });
 
-/** ---------- boot ---------- */
-(function init() {
+/** ---------- realtime boot (starts only after unlock) ---------- */
+let started = false;
+
+function startRealtime() {
+  if (started) return;
+  started = true;
+
   const q = query(teamsCollectionRef());
 
   onSnapshot(q, (snap) => {
     const teams = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-    // stable: available first, then name
     teams.sort((a,b) => {
       const av = isAvailable(a), bv = isAvailable(b);
       if (av !== bv) return av ? -1 : 1;
@@ -428,4 +412,4 @@ modal?.addEventListener("click", (e) => {
     console.error("Firestore onSnapshot error:", err);
     teamsMeta.textContent = "Firestore error (check firebaseConfig/rules)";
   });
-})();
+}
