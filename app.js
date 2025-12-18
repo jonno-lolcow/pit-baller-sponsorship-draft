@@ -30,12 +30,9 @@ const TEAM_NAME_FIELD = "name";
 const SPONSOR_FIELD   = "sponsorName";
 const DEFAULT_SPONSOR = "Your Name Here";
 
-/**
- * If TEAM_ICON_FIELD is just a filename like "reapers.png",
- * we'll serve it from /img/teams/
- */
-const TEAMS_ICON_BASE = "img/teams/";   // your folder
-const FALLBACK_ICON   = "img/icons/team-fallback.png";
+const ICONS_DIR = "img/icons/";
+const CARDS_DIR = "img/teams/";
+const FALLBACK_ICON = "img/icons/team-fallback.png";
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
@@ -65,26 +62,11 @@ const pickMeta = el("pickMeta");
 let latestTeams = [];
 let currentSponsor = "";
 
-/** ---------- Helpers ---------- */
+/** ---------- helpers ---------- */
 function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, (m) => ({
     "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
   }[m]));
-}
-
-function getTeamName(team) {
-  return team?.[TEAM_NAME_FIELD] ?? "Unknown Team";
-}
-
-function resolveIconUrl(raw) {
-  const v = (raw ?? "").toString().trim();
-  if (!v) return FALLBACK_ICON;
-
-  // already absolute (https://) or root-relative (/img/teams/x.png) or relative (img/teams/x.png)
-  if (v.startsWith("http://") || v.startsWith("https://") || v.startsWith("/") || v.startsWith("img/")) return v;
-
-  // treat as filename stored in Firestore
-  return `${TEAMS_ICON_BASE}${v}`;
 }
 
 function teamKeyFromName(name) {
@@ -96,17 +78,9 @@ function teamKeyFromName(name) {
     .replace(/[^A-Za-z0-9_()]/g, "");
 }
 
-function getTeamIcon(team) {
-  const key = teamKeyFromName(team[TEAM_NAME_FIELD]);
-  return `img/icons/${key}.png`;
+function getTeamName(team) {
+  return team?.[TEAM_NAME_FIELD] ?? "Unknown";
 }
-
-function getTeamCard(team) {
-  const key = teamKeyFromName(team[TEAM_NAME_FIELD]);
-  return `img/teams/${key}.png`;
-}
-
-revealTeamIcon.src = getTeamCard(team);
 
 function getSponsor(team) {
   return team?.[SPONSOR_FIELD] ?? DEFAULT_SPONSOR;
@@ -116,12 +90,22 @@ function isAvailable(team) {
   return (getSponsor(team) || DEFAULT_SPONSOR) === DEFAULT_SPONSOR;
 }
 
+function iconUrl(team) {
+  const key = teamKeyFromName(getTeamName(team));
+  return `${ICONS_DIR}${key}.png`;
+}
+
+function cardUrl(team) {
+  const key = teamKeyFromName(getTeamName(team));
+  return `${CARDS_DIR}${key}.png`;
+}
+
 function cleanSponsorName(raw) {
   const s = (raw || "").trim().replace(/\s+/g, " ");
   return s ? s.slice(0, 40) : "";
 }
 
-/** ---------- Steps ---------- */
+/** ---------- modal ---------- */
 function setStep(which) {
   stepSponsor.classList.toggle("hidden", which !== "sponsor");
   stepType.classList.toggle("hidden", which !== "type");
@@ -145,69 +129,67 @@ function showModal() {
   setStep("sponsor");
   sponsorInput.focus();
 }
+
 function hideModal() {
   modal.classList.add("hidden");
 }
 
 function showReveal(team, sponsor) {
   revealTeamName.textContent = getTeamName(team);
-  revealTeamIcon.src = getTeamIcon(team);
+  revealTeamIcon.src = cardUrl(team);          // ✅ TEAM CARD IMAGE
   revealTeamIcon.alt = getTeamName(team);
   revealSponsorName.textContent = sponsor;
   revealView.classList.remove("hidden");
-  window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
 }
+
 function hideReveal() {
   revealView.classList.add("hidden");
 }
 
-/** ---------- Rendering ---------- */
+/** ---------- render ---------- */
 function renderTeams(teams) {
+  if (!teamsGrid) return;
+
   const total = teams.length;
   const available = teams.filter(isAvailable).length;
   teamsMeta.textContent = `${available} available • ${total - available} sponsored • ${total} total`;
 
-  teamsGrid.innerHTML = teams.map(t => {
-    const sponsor = getSponsor(t);
-    const icon = getTeamIcon(t);
-    const name = getTeamName(t);
-    return `
-      <div class="teamCard" data-id="${t.id}">
-        <div class="teamTop">
-          <img class="teamIcon" src="${escapeHtml(icon)}" alt="${escapeHtml(name)}"
-               onerror="this.onerror=null;this.src='${FALLBACK_ICON}'" />
-          <div>
-            <div class="teamName">${escapeHtml(name)}</div>
-            <div class="muted">${escapeHtml(t.id)}</div>
-          </div>
-        </div>
-        <div class="teamSponsor">
-          <div class="label">Sponsor</div>
-          <div class="sponsorName">${escapeHtml(sponsor)}</div>
+  teamsGrid.innerHTML = teams.map(t => `
+    <div class="teamCard" data-id="${t.id}">
+      <div class="teamTop">
+        <img class="teamIcon"
+             src="${escapeHtml(iconUrl(t))}"
+             alt="${escapeHtml(getTeamName(t))}"
+             onerror="this.onerror=null;this.src='${FALLBACK_ICON}'" />
+        <div>
+          <div class="teamName">${escapeHtml(getTeamName(t))}</div>
+          <div class="muted">${escapeHtml(t.id)}</div>
         </div>
       </div>
-    `;
-  }).join("");
+
+      <div class="teamSponsor">
+        <div class="label">Sponsor</div>
+        <div class="sponsorName">${escapeHtml(getSponsor(t))}</div>
+      </div>
+    </div>
+  `).join("");
 }
 
 function renderPickGrid(teams) {
   const availableTeams = teams.filter(isAvailable);
   pickMeta.textContent = `${availableTeams.length} teams available`;
 
-  pickGrid.innerHTML = availableTeams.map(t => {
-    const icon = getTeamIcon(t);
-    const name = getTeamName(t);
-    return `
-      <button class="pickBtn" data-id="${t.id}">
-        <img src="${escapeHtml(icon)}" alt="${escapeHtml(name)}"
-             onerror="this.onerror=null;this.src='${FALLBACK_ICON}'" />
-        <div>
-          <div style="font-weight:980">${escapeHtml(name)}</div>
-          <div class="muted">Click to sponsor</div>
-        </div>
-      </button>
-    `;
-  }).join("");
+  pickGrid.innerHTML = availableTeams.map(t => `
+    <button class="pickBtn" data-id="${t.id}">
+      <img src="${escapeHtml(iconUrl(t))}"
+           alt="${escapeHtml(getTeamName(t))}"
+           onerror="this.onerror=null;this.src='${FALLBACK_ICON}'" />
+      <div>
+        <div style="font-weight:950">${escapeHtml(getTeamName(t))}</div>
+        <div class="muted">Click to sponsor</div>
+      </div>
+    </button>
+  `).join("");
 
   pickGrid.querySelectorAll(".pickBtn").forEach(btn => {
     btn.addEventListener("click", async () => {
@@ -224,7 +206,7 @@ function renderPickGrid(teams) {
   });
 }
 
-/** ---------- Firestore ops ---------- */
+/** ---------- firestore ops ---------- */
 function teamsCollectionRef() {
   return collection(db, COLLECTION_NAME);
 }
@@ -237,7 +219,8 @@ async function claimSpecificTeam(teamId, sponsorName) {
     if (!snap.exists()) throw new Error("Team not found.");
 
     const data = snap.data();
-    const current = (data?.[SPONSOR_FIELD] ?? DEFAULT_SPONSOR);
+    const current = data?.[SPONSOR_FIELD] ?? DEFAULT_SPONSOR;
+
     if (current !== DEFAULT_SPONSOR) throw new Error("That team already has a sponsor.");
 
     tx.update(ref, {
@@ -270,12 +253,8 @@ async function resetAllSponsors() {
   if (!ok) return;
 
   const snap = await getDocs(teamsCollectionRef());
-  if (snap.empty) {
-    alert("No team documents found to reset.");
-    return;
-  }
-
   const batch = writeBatch(db);
+
   snap.forEach((d) => {
     batch.update(d.ref, { [SPONSOR_FIELD]: DEFAULT_SPONSOR, updatedAt: serverTimestamp() });
   });
@@ -283,7 +262,7 @@ async function resetAllSponsors() {
   await batch.commit();
 }
 
-/** ---------- Events ---------- */
+/** ---------- events ---------- */
 el("btnStart").addEventListener("click", () => {
   hideReveal();
   showModal();
@@ -335,12 +314,14 @@ modal.addEventListener("click", (e) => {
   if (e.target === modal) hideModal();
 });
 
-/** ---------- Boot realtime ---------- */
+/** ---------- boot ---------- */
 (function init() {
   const q = query(teamsCollectionRef());
 
   onSnapshot(q, (snap) => {
     const teams = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // stable: available first, then name
     teams.sort((a,b) => {
       const av = isAvailable(a), bv = isAvailable(b);
       if (av !== bv) return av ? -1 : 1;
@@ -351,7 +332,9 @@ modal.addEventListener("click", (e) => {
     renderTeams(teams);
 
     if (!stepPick.classList.contains("hidden")) renderPickGrid(teams);
-  }, () => {
-    teamsMeta.textContent = "Firestore error (check rules/config/collection name)";
+  }, (err) => {
+    console.error("Firestore onSnapshot error:", err);
+    teamsMeta.textContent = "Firestore error (check firebaseConfig/rules)";
   });
 })();
+
