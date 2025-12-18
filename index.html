@@ -20,13 +20,14 @@
 
     <header class="topbar">
       <div class="brand">
-        <img class="brandIcon" src="img/icons/pitballer-icon.png" alt="Pit Baller" />
         <div>
           <div class="kicker">Pit Baller</div>
           <h1>Sponsorship Draft</h1>
-          <div class="muted">Enter sponsor → allocation type → reveal → repeat</div>
         </div>
       </div>
+
+      <!-- Centered meta -->
+      <div id="teamsMetaTop" class="metaTop">—</div>
 
       <div class="topbarActions">
         <button id="btnStart" class="btn primary">New Sponsorship</button>
@@ -40,7 +41,8 @@
       <section class="gridWrap">
         <div class="sectionTitle">
           <h2>Teams</h2>
-          <div class="muted" id="teamsMeta">—</div>
+          <!-- Keep for JS compatibility; hidden by default -->
+          <div class="muted hidden" id="teamsMeta">—</div>
         </div>
 
         <div id="teamsGrid" class="teamsGrid" aria-live="polite"></div>
