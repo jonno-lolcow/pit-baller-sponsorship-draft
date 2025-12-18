@@ -21,9 +21,6 @@ const firebaseConfig = {
       appId: "1:10961796042:web:9dcc8d72c204abd7d4ed33"
 };
 
-/** ✅ EDIT: same collection Pit Ballers reads */
-const COLLECTION_NAME = "teams";
-
 /** If your doc fields differ, adjust these */
 const COLLECTION_NAME = "teams";
 const TEAM_NAME_FIELD = "name";
