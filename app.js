@@ -48,6 +48,7 @@ const gateBtn = el("gateBtn");
 const gateErr = el("gateErr");
 
 let unlocked = false;
+let prevSponsorById = new Map();
 
 /** UI refs */
 const teamsGrid = el("teamsGrid");
@@ -301,24 +302,37 @@ function renderTeams(teams) {
   if (teamsMeta) teamsMeta.textContent = `${available} available • ${sponsored} sponsored`;
   if (teamsMetaTop) teamsMetaTop.textContent = `${available} available • ${sponsored} sponsored`;
 
-  teamsGrid.innerHTML = teams.map(t => `
-    <div class="teamCard ${isAvailable(t) ? "" : "isSponsored"}" data-id="${t.id}">
+teamsGrid.innerHTML = teams.map(t => {
+  const name = getTeamName(t);
+  const sponsor = getSponsor(t);
+  const available = isAvailable(t);
+
+  const prev = prevSponsorById.get(t.id) ?? DEFAULT_SPONSOR;
+  const justSponsored = (prev === DEFAULT_SPONSOR && sponsor !== DEFAULT_SPONSOR);
+
+  return `
+    <div class="teamCard ${available ? "" : "isSponsored"} ${justSponsored ? "justSponsored" : ""}" data-id="${t.id}">
       <div class="teamTop">
-        <img class="teamIcon"
-             src="${escapeHtml(iconUrl(t))}"
-             alt="${escapeHtml(getTeamName(t))}"
-             onerror="this.onerror=null;this.src='${FALLBACK_ICON}'" />
+        <div class="teamIconWrap">
+          <img class="teamIcon"
+               src="${escapeHtml(iconUrl(t))}"
+               alt="${escapeHtml(name)}"
+               onerror="this.onerror=null;this.src='${FALLBACK_ICON}'" />
+          ${available ? "" : `<span class="lockBadge" title="Sponsored" aria-label="Sponsored">🔒</span>`}
+        </div>
+
         <div>
-          <div class="teamName">${escapeHtml(getTeamName(t))}</div>
+          <div class="teamName">${escapeHtml(name)}</div>
         </div>
       </div>
 
       <div class="teamSponsor">
         <div class="label">Sponsor</div>
-        <div class="sponsorName">${escapeHtml(getSponsor(t))}</div>
+        <div class="sponsorName">${escapeHtml(sponsor)}</div>
       </div>
     </div>
-  `).join("");
+  `;
+}).join("");
 }
 
 function renderPickGrid(teams) {
@@ -493,7 +507,9 @@ function startRealtime() {
     preloadAllAssets(teams);
 
     renderTeams(teams);
+    prevSponsorById = new Map(teams.map(t => [t.id, getSponsor(t)]));
 
+    
     if (!stepPick.classList.contains("hidden")) renderPickGrid(teams);
   }, (err) => {
     console.error("Firestore onSnapshot error:", err);
