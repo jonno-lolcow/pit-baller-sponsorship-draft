@@ -120,7 +120,7 @@ function cardUrl(team) {
 
 function cleanSponsorName(raw) {
   const s = (raw || "").trim().replace(/\s+/g, " ");
-  return s ? s.slice(0, 40) : "";
+  return s ? s.slice(0, 32) : "";
 }
 
 function requireUnlocked() {
